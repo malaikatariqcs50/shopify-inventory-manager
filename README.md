@@ -55,13 +55,14 @@ SHOPIFY_APP_URL
 SCOPES
 ```
 
-The configured local scope is `SCOPES=read_products`.
+The configured local scopes are `SCOPES=read_products,write_products`.
 
 ## Required Shopify API scope
 
 The app requests one Admin API scope:
 
 - `read_products` — reads product records, first-variant prices, product status, and `totalInventory` for the inventory dashboard
+- `write_products` — creates, renames, and deletes products from the dashboard
 
 No write scope is required by the implemented features.
 

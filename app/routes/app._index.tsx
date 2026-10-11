@@ -1,6 +1,10 @@
-import { useState } from "react";
-import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { useLoaderData, useRevalidator } from "react-router";
+import { useEffect, useState } from "react";
+import type {
+  HeadersFunction,
+  LoaderFunctionArgs,
+  ActionFunctionArgs,
+} from "react-router";
+import { useFetcher, useLoaderData, useRevalidator } from "react-router";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import styles from "../styles/inventory.module.css";
@@ -50,6 +54,83 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   };
 };
 
+export const action = async ({ request }: ActionFunctionArgs) => {
+  const { admin } = await authenticate.admin(request);
+
+  const formData = await request.formData();
+  const intent = String(formData.get("intent") ?? "create");
+  const title = String(formData.get("title") ?? "").trim();
+  const id = String(formData.get("id") ?? "").trim();
+
+  if (intent === "create" && !title) {
+    return { success: false, intent, error: "Product title is required" };
+  }
+  if ((intent === "update" || intent === "delete") && !id) {
+    return { success: false, intent, error: "Product ID is required" };
+  }
+  if (intent === "update" && !title) {
+    return { success: false, intent, error: "Product title is required" };
+  }
+  if (!["create", "update", "delete"].includes(intent)) {
+    return { success: false, intent, error: "Unsupported product operation" };
+  }
+
+  const mutation =
+    intent === "create"
+      ? `mutation CreateProduct($product: ProductCreateInput!) {
+        productCreate(product: $product) {
+          product { id title status }
+          userErrors { field message }
+        }
+      }`
+      : intent === "update"
+        ? `mutation UpdateProduct($input: ProductInput!) {
+          productUpdate(input: $input) {
+            product { id title status }
+            userErrors { field message }
+          }
+        }`
+        : `mutation DeleteProduct($input: ProductDeleteInput!) {
+          productDelete(input: $input) {
+            deletedProductId
+            userErrors { field message }
+          }
+        }`;
+  const variables =
+    intent === "create"
+      ? { product: { title } }
+      : intent === "update"
+        ? { input: { id, title } }
+        : { input: { id } };
+  const response = await admin.graphql(mutation, { variables });
+  const result = (await response.json()) as {
+    data?: Record<string, { userErrors?: { message?: string }[] }>;
+    errors?: { message?: string }[];
+  };
+  const payload =
+    result.data?.[
+      intent === "create"
+        ? "productCreate"
+        : intent === "update"
+          ? "productUpdate"
+          : "productDelete"
+    ];
+  const errors = payload?.userErrors ?? [];
+
+  if (result.errors?.length || errors.length) {
+    return {
+      success: false,
+      intent,
+      error:
+        errors[0]?.message ??
+        result.errors?.[0]?.message ??
+        `Failed to ${intent} product`,
+    };
+  }
+
+  return { success: true, intent };
+};
+
 type StockFilter = "all" | "low" | "out";
 
 function InventoryIcon({ refresh = false }: { refresh?: boolean }) {
@@ -94,9 +175,22 @@ function escapeCsvField(value: string | number) {
 export default function InventoryDashboard() {
   const { products } = useLoaderData<typeof loader>();
   const revalidator = useRevalidator();
+  const fetcher = useFetcher<typeof action>();
+  const [newTitle, setNewTitle] = useState("");
   const [search, setSearch] = useState("");
   const [stockFilter, setStockFilter] = useState<StockFilter>("all");
   const refreshing = revalidator.state !== "idle";
+  const submitting = fetcher.state !== "idle";
+
+  useEffect(() => {
+    if (
+      fetcher.state === "idle" &&
+      fetcher.data?.success &&
+      fetcher.data.intent === "create"
+    ) {
+      setNewTitle("");
+    }
+  }, [fetcher.data, fetcher.state]);
   const lowStock = products.filter(
     (p) => p.totalInventory > 0 && p.totalInventory < 10,
   ).length;
@@ -225,6 +319,42 @@ export default function InventoryDashboard() {
           </div>
           <span className={styles.source}>Shopify inventory</span>
         </div>
+        <form
+          className={styles.createForm}
+          onSubmit={(event) => {
+            event.preventDefault();
+            fetcher.submit(
+              { intent: "create", title: newTitle },
+              { method: "POST" },
+            );
+          }}
+        >
+          <div className={styles.createInputGroup}>
+            <label htmlFor="new-product-title">Create a product</label>
+            <input
+              id="new-product-title"
+              type="text"
+              value={newTitle}
+              onChange={(event) => setNewTitle(event.target.value)}
+              placeholder="Enter product title"
+              disabled={submitting}
+            />
+          </div>
+          <button
+            className={styles.createButton}
+            type="submit"
+            disabled={submitting || !newTitle.trim()}
+          >
+            {submitting && fetcher.formData?.get("intent") === "create"
+              ? "Creating…"
+              : "Create product"}
+          </button>
+        </form>
+        {fetcher.data?.error && (
+          <p className={styles.actionError} role="alert">
+            {fetcher.data.error}
+          </p>
+        )}
         <div className={styles.toolbar}>
           <div
             className={styles.filters}
@@ -286,6 +416,7 @@ export default function InventoryDashboard() {
                   Available units
                 </th>
                 <th scope="col">Stock status</th>
+                <th scope="col">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -318,6 +449,63 @@ export default function InventoryDashboard() {
                         <span className={styles.badgeDot} />
                         {status}
                       </span>
+                    </td>
+                    <td>
+                      <div className={styles.rowActions}>
+                        <input
+                          key={`${product.id}-${product.title}`}
+                          className={styles.inlineTitleInput}
+                          aria-label={`Title for ${product.title}`}
+                          defaultValue={product.title}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              fetcher.submit(
+                                {
+                                  intent: "update",
+                                  id: product.id,
+                                  title: event.currentTarget.value,
+                                },
+                                { method: "POST" },
+                              );
+                            }
+                          }}
+                        />
+                        <button
+                          className={styles.rowButton}
+                          type="button"
+                          disabled={submitting}
+                          onClick={(event) => {
+                            const input =
+                              event.currentTarget.parentElement?.querySelector<HTMLInputElement>(
+                                "input",
+                              );
+                            fetcher.submit(
+                              {
+                                intent: "update",
+                                id: product.id,
+                                title: input?.value ?? product.title,
+                              },
+                              { method: "POST" },
+                            );
+                          }}
+                        >
+                          Save
+                        </button>
+                        <button
+                          className={styles.deleteButton}
+                          type="button"
+                          disabled={submitting}
+                          onClick={() =>
+                            fetcher.submit(
+                              { intent: "delete", id: product.id },
+                              { method: "POST" },
+                            )
+                          }
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );

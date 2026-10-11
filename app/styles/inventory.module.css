@@ -186,6 +186,84 @@
   font-weight: 650;
   letter-spacing: -0.3px;
 }
+.createForm {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 0 24px 20px;
+  border-bottom: 1px solid #edf0ed;
+}
+.createInputGroup {
+  display: grid;
+  gap: 5px;
+  flex: 1;
+  max-width: 460px;
+}
+.createInputGroup label {
+  color: #5d6760;
+  font-size: 12px;
+  font-weight: 600;
+}
+.createInputGroup input,
+.inlineTitleInput {
+  min-width: 0;
+  border: 1px solid #dfe4e0;
+  border-radius: 7px;
+  padding: 9px 11px;
+  background: #fff;
+  color: #28342d;
+  font: inherit;
+  outline: none;
+}
+.createInputGroup input:focus,
+.inlineTitleInput:focus {
+  border-color: #638f76;
+  box-shadow: 0 0 0 3px #e6f0e9;
+}
+.createButton,
+.rowButton,
+.deleteButton {
+  border: 1px solid #244d3e;
+  border-radius: 7px;
+  padding: 9px 12px;
+  background: #244d3e;
+  color: white;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.createButton:disabled,
+.rowButton:disabled,
+.deleteButton:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.actionError {
+  margin: -8px 24px 16px;
+  color: #a33d35;
+  font-size: 12px;
+}
+.rowActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.inlineTitleInput {
+  width: 150px;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+.rowButton {
+  padding: 6px 9px;
+}
+.deleteButton {
+  border-color: #d8aaa5;
+  background: #fff5f3;
+  color: #a33d35;
+  padding: 6px 9px;
+}
 .sectionHeading p {
   margin-top: 5px;
   font-size: 13px;
@@ -477,6 +555,14 @@
   }
   .toolbar {
     padding: 0 16px 16px;
+  }
+  .createForm {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 0 16px 16px;
+  }
+  .createInputGroup {
+    max-width: none;
   }
   .tableFooter {
     padding: 16px;
